@@ -74,33 +74,81 @@ void choose_scene(char const *fn) {
 
 /************************************************************************************************/
 
-float plane_intersection(point3 eye, point3 direction, point3 plane_normal, point3 plane_point) {
-	float t = glm::dot(plane_normal, plane_point - eye) / glm::dot(plane_normal, direction);
+struct RayCastSolution {
+	float t;
+	json object;
+	int triangle_index;
+};
+
+struct Plane {
+	point3 pos;
+	point3 n;
+};
+
+struct Sphere {
+	point3 center;
+	float r;
+};
+
+struct Triangle {
+	point3 a, b, c;
+	point3 n;
+};
+
+Plane get_plane(json &object) {
+	Plane result;
+	result.pos = vector_to_vec3(object["position"]);
+	result.n = vector_to_vec3(object["normal"]);
+	return result;
+}
+
+Sphere get_sphere(json &object) {
+	Sphere result;
+	result.center = vector_to_vec3(object["position"]);
+	result.r = float(object["radius"]);
+	return result;
+}
+
+Triangle get_triangle(json &object, int index) {
+	Triangle result;
+	//std::vector<std::vector<std::vector<float>>> triangles = object["triangles"];
+	std::vector<std::vector<float>> triangle = object["triangles"][index];
+
+	result.a = vector_to_vec3(triangle[0]);
+	result.b = vector_to_vec3(triangle[1]);
+	result.c = vector_to_vec3(triangle[2]);
+
+	result.n = glm::normalize(glm::cross(result.b - result.a, result.c - result.a));
+
+	return result;
+}
+
+float plane_intersection(point3 eye, point3 direction, Plane plane) {
+	float t = glm::dot(plane.n, plane.pos - eye) / glm::dot(plane.n, direction);
 	return t > 0.0? t : MAX_T;
 }
 
-float triangle_intersetion(point3 e, point3 d, point3 a, point3 b, point3 c, point3 plane_n, std::vector<std::vector<float>> triangle) {
+float triangle_intersetion(point3 e, point3 d, Triangle triangle){
 
-	float t = glm::dot(plane_n, a - e) / glm::dot(plane_n, d);
-
+	float t = glm::dot(triangle.n, triangle.a - e) / glm::dot(triangle.n, d);
 	point3 x = e + t * d;
 
-	bool triangle_test_0 = glm::dot(glm::cross(b - a, x - a), plane_n) > 0.0;
-	bool triangle_test_1 = glm::dot(glm::cross(c - b, x - b), plane_n) > 0.0;
-	bool triangle_test_2 = glm::dot(glm::cross(a - c, x - c), plane_n) > 0.0;
+	bool triangle_test_0 = glm::dot(glm::cross(triangle.b - triangle.a, x - triangle.a), triangle.n) > 0.0;
+	bool triangle_test_1 = glm::dot(glm::cross(triangle.c - triangle.b, x - triangle.b), triangle.n) > 0.0;
+	bool triangle_test_2 = glm::dot(glm::cross(triangle.a - triangle.c, x - triangle.c), triangle.n) > 0.0;
 
 	return triangle_test_0 && triangle_test_1 && triangle_test_2 ? t : MAX_T;
 }
 
-float sphere_intersection(point3 e, point3 d, point3 center, float r) {
+float sphere_intersection(point3 e, point3 d, Sphere sphere) {
 	float a = glm::dot(d, d);
-	float b = 2.0*glm::dot(d, e - center);
-	float c = glm::dot(e - center, e - center) - r * r;
+	float b = 2.0f*glm::dot(d, e - sphere.center);
+	float c = glm::dot(e - sphere.center, e - sphere.center) - std::pow(sphere.r, 2);
 
 	float discriminant = b * b - 4 * a*c;
 	if (discriminant >= 0) {
-		float solution_0 = (-1.0*b + glm::sqrt(discriminant)) / (2.0*a);
-		float solution_1 = (-1.0*b - glm::sqrt(discriminant)) / (2.0*a);
+		float solution_0 = (-1.0f*b + glm::sqrt(discriminant)) / (2.0f*a);
+		float solution_1 = (-1.0f*b - glm::sqrt(discriminant)) / (2.0f*a);
 
 		float t = glm::min(solution_0, solution_1);
 		return t;
@@ -132,7 +180,7 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material,
 	colour3 ambient = material.find("ambient") != material.end() ? vector_to_vec3(material["ambient"]) : colour3(0.0, 0.0, 0.0);
 	colour3 diffuse = material.find("diffuse") != material.end() ? vector_to_vec3(material["diffuse"]) : colour3(0.0, 0.0, 0.0);
 	colour3 specular = material.find("specular") != material.end() ? vector_to_vec3(material["specular"]) : colour3(0.0, 0.0, 0.0);
-	float shininess = material.find("shininess") != material.end() ? float(material["shininess"]) : 0.0;
+	float shininess = material.find("shininess") != material.end() ? float(material["shininess"]) : 0.0f;
 
 	colour3 total_colour = colour3(0.0, 0.0, 0.0);
 
@@ -161,6 +209,66 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material,
 }
 
 
+RayCastSolution cast_ray(point3 e, point3 d, bool find_any){
+
+	json &objects = scene["objects"];
+	RayCastSolution solution;
+	solution.t = MAX_T;
+	d = glm::normalize(d);
+
+	for (json::iterator it = objects.begin(); it != objects.end(); ++it) {
+		json &object = *it;
+
+		if (object["type"] == "mesh") {
+			std::vector<std::vector<std::vector<float>>> triangles = object["triangles"];
+			for(int i=0; i < triangles.size(); i++){
+				Triangle triangle = get_triangle(object, i);
+				point3 a = triangle.a;
+				point3 b = triangle.b;
+				point3 c = triangle.c;
+				point3 plane_n = triangle.n;
+
+				float t = triangle_intersetion(e, d, triangle);
+
+				if (t < solution.t) { // intersection
+					solution.t = t;
+					solution.object = object;
+					solution.triangle_index = i;
+					if (find_any)
+						return solution;
+				}
+
+			}
+
+		}
+		else if (object["type"] == "sphere") {
+			Sphere sphere = get_sphere(object);
+			float t = sphere_intersection(e, d, sphere);
+			if (t < solution.t) {
+				solution.t = t;
+				solution.object = object;
+				if (find_any)
+					return solution;
+			}
+		}
+		else if (object["type"] == "plane") {
+			Plane plane = get_plane(object);
+			float t = plane_intersection(e, d, plane);
+			
+			if (t < solution.t) {
+				solution.t = t;
+				solution.object = object;
+				if (find_any)
+					return solution;
+			}
+		}
+
+	}
+
+	return solution;
+}
+
+
 bool trace(const point3 &e, const point3 &s, colour3 &colour, bool pick) {
 
 	float min_t = MAX_T;
@@ -171,111 +279,35 @@ bool trace(const point3 &e, const point3 &s, colour3 &colour, bool pick) {
 
 	point3 d = s - e;
 	d = glm::normalize(d);
-	// traverse the objects
+
 	json &objects = scene["objects"];
 	json &lights = scene["lights"];
 
-	for (json::iterator it = objects.begin(); it != objects.end(); ++it) {
-		json &object = *it;
+	RayCastSolution solution = cast_ray(e, d, false);
 
-		// Every object will have a material
-		json &material = object["material"];
+	json &object = solution.object;
+	float t = solution.t;
+	json &material = object["material"];
 
-		if (object["type"] == "mesh") {
-			std::vector<std::vector<std::vector<float>>> triangles = object["triangles"];
+	if (t == MAX_T)
+		return false;
 
-			//std::vector<std::vector<float>> triangle = triangles[0];
-			for (std::vector<std::vector<std::vector<float>>>::size_type i = 0; i != triangles.size(); i++) {
-				std::vector<std::vector<float>> triangle = triangles[i];
+	std::string object_type = object["type"];
+	point3 x = e + t * d;
 
-				point3 a = vector_to_vec3(triangle[0]);
-				point3 b = vector_to_vec3(triangle[1]);
-				point3 c = vector_to_vec3(triangle[2]);
-
-				point3 plane_n = glm::cross(b - a, c - a);
-				plane_n = glm::normalize(plane_n);
-
-				float t = triangle_intersetion(e, d, a, b, c, plane_n, triangle);
-				point3 x = e + t * d;
-
-				if (t < min_t) {
-					min_t = t;
-					closest_object = object;
-					closest_triangle = triangle;
-					//closest_colour = colour3(1.0, 0.0, 0.0);
-					closest_colour = calculate_lighting(plane_n, x, e - x, material, lights) + calculate_lighting(-plane_n, x, e - x, material, lights);
-					//colour = colour3(1.0, 0.0, 0.0);
-					//return true;
-					found = true;
-					break;
-				}
-			}
-
-		}
-		else if (object["type"] == "sphere") {
-
-			point3 center = vector_to_vec3(object["position"]);
-			float r = float(object["radius"]);
-
-			float t = sphere_intersection(e, d, center, r);
-			if (t < min_t) {
-				min_t = t;
-				closest_object = object;
-				point3 x = e + t * d;
-				closest_colour = calculate_lighting(x - center, x, e - x, material, lights);
-				//return true;
-				found = true;
-			}
-		}
-		else if (object["type"] == "plane") {
-			point3 a = vector_to_vec3(object["position"]);
-			point3 n = vector_to_vec3(object["normal"]);
-
-			//float t = glm::dot(n, a - e) / glm::dot(n, d);
-			float t = plane_intersection(e, d, n, a);
-			point3 x = e + t * d;
-
-			if (t < min_t) {
-				min_t = t;
-				closest_colour = calculate_lighting(n, x, e - x, material, lights);
-				//return true;
-				found = true;
-			}
-		}
-
+	if (object_type == "sphere") {
+		Sphere sphere = get_sphere(object);
+		colour = calculate_lighting(x - sphere.center, x, e - x, material, lights);
+	}
+	else if (object_type == "plane") {
+		Plane plane = get_plane(object);
+		colour = calculate_lighting(plane.n, x, e - x, material, lights);
+	}
+	else if (object_type == "mesh") {
+		Triangle triangle = get_triangle(object, solution.triangle_index);
+		colour = calculate_lighting(triangle.n, x, e - x, material, lights);
 	}
 
-	colour = closest_colour;
-	return found;
+
+	return true;
 }
-
-/*
-bool trace(const point3 &e, const point3 &s, colour3 &colour, bool pick) {
-	// NOTE: This is a demo, not ray tracing code! You will need to replace all of this with your own code...
-
-	// traverse the objects
-	json &objects = scene["objects"];
-	for (json::iterator it = objects.begin(); it != objects.end(); ++it) {
-		json &object = *it;
-		
-		// every object in the scene will have a "type"
-		if (object["type"] == "sphere") {
-			// This is NOT ray-sphere intersection
-			// Every sphere will have a position and a radius
-			std::vector<float> pos = object["position"];
-			point3 p = -(s - e) * pos[2];
-			if (glm::length(glm::vec3(p.x - pos[0],p.y - pos[1],0)) < float(object["radius"])) {
-				// Every object will have a material
-				json &material = object["material"];
-				std::vector<float> diffuse = material["diffuse"];
-				colour = vector_to_vec3(diffuse);
-				colour = colour3(1.0, 0.0, 0.0);
-				// This is NOT correct: it finds the first hit, not the closest
-				return true;
-			}
-		}
-	}
-
-	return false;
-}
-*/
