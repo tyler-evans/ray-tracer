@@ -79,6 +79,8 @@ struct RayCastSolution {
 	float t;
 	json object;
 	int triangle_index;
+	bool intersection;
+	colour3 colour;
 };
 
 struct Plane {
@@ -163,6 +165,7 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 	json &objects = scene["objects"];
 	RayCastSolution solution;
 	solution.t = MAX_T;
+	solution.intersection = false;
 	d = glm::normalize(d);
 
 	for (json::iterator it = objects.begin(); it != objects.end(); ++it) {
@@ -183,6 +186,7 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 					solution.t = t;
 					solution.object = object;
 					solution.triangle_index = i;
+					solution.intersection = true;
 					if (find_any)
 						return solution;
 				}
@@ -196,6 +200,7 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 			if (t < solution.t) {
 				solution.t = t;
 				solution.object = object;
+				solution.intersection = true;
 				if (find_any)
 					return solution;
 			}
@@ -207,6 +212,7 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 			if (t < solution.t) {
 				solution.t = t;
 				solution.object = object;
+				solution.intersection = true;
 				if (find_any)
 					return solution;
 			}
@@ -217,6 +223,9 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 	return solution;
 }
 
+point3 reflect(point3 V, point3 N) {
+	return -glm::reflect(V, N);
+}
 
 float calculate_I_d(point3 N, point3 L) {
 	float I_d = glm::dot(glm::normalize(N), glm::normalize(L));
@@ -228,15 +237,15 @@ float calculate_I_s(point3 N, point3 L, point3 V, float alpha) {
 	L = glm::normalize(L);
 	V = glm::normalize(V);
 
-	point3 R = (2.0f * glm::dot(N, L) * N) - L;
-	R = glm::normalize(R);
+	point3 R = reflect(L, N);
 
 	float base = std::min(std::max(glm::dot(R, V), 0.0f), 1.0f);
 	float I_s = std::pow(base, alpha);
 	return I_s;
 }
 
-colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material, json &lights) {
+colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material) {
+	json &lights = scene["lights"];
 
 	colour3 ambient = material.find("ambient") != material.end() ? vector_to_vec3(material["ambient"]) : colour3(0.0, 0.0, 0.0);
 	colour3 diffuse = material.find("diffuse") != material.end() ? vector_to_vec3(material["diffuse"]) : colour3(0.0, 0.0, 0.0);
@@ -271,7 +280,8 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material,
 			float I_s = calculate_I_s(normal, light_position - x, look, shininess);
 
 			float shadow_test = cast_ray(x, light_position - x, true).t;
-			if (EPS < shadow_test && shadow_test < MAX_T){
+			float distance_to_light = glm::length(light_position - x);
+			if (EPS < shadow_test && shadow_test < MAX_T && shadow_test < distance_to_light){
 				I_d = 0.0;
 				I_s = 0.0;
 			}
@@ -283,15 +293,50 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material,
 	return total_colour;
 }
 
+const int MAX_LEVEL = 1;
+colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection) {
+
+	colour3 colour = background_colour;
+
+	RayCastSolution solution = cast_ray(e, d, false);
+	json &object = solution.object;
+	float t = solution.t;
+	json &material = object["material"];
+
+	if (t == MAX_T) 
+		return colour;
+	found_intersection = true;
+
+	std::string object_type = object["type"];
+	point3 x = e + t * d;
+	point3 normal;
+
+	if (object_type == "sphere")
+		normal = x - get_sphere(object).center;
+	else if (object_type == "plane")
+		normal = get_plane(object).n;
+	else if (object_type == "mesh")
+		normal = get_triangle(object, solution.triangle_index).n;
+
+	point3 R = reflect(e - x, normal);
+	colour = calculate_lighting(normal, x, e - x, material);
+	/*if(level < MAX_LEVEL)
+		colour += mirror_term * recursive_trace(x + EPS * R, R, level+1);
+	*/
+	return colour;
+}
+
+
 
 bool trace(const point3 &e, const point3 &s, colour3 &colour, bool pick) {
+	point3 d = glm::normalize(s - e);
 
-	point3 d = s - e;
-	d = glm::normalize(d);
+	bool result = false;
+	colour = recursive_trace(e, d, 0, result);
+	return result;
 
-	json &objects = scene["objects"];
-	json &lights = scene["lights"];
 
+	/*
 	RayCastSolution solution = cast_ray(e, d, false);
 
 	json &object = solution.object;
@@ -306,17 +351,43 @@ bool trace(const point3 &e, const point3 &s, colour3 &colour, bool pick) {
 
 	if (object_type == "sphere") {
 		Sphere sphere = get_sphere(object);
-		colour = calculate_lighting(x - sphere.center, x, e - x, material, lights);
+		colour = calculate_lighting(x - sphere.center, x, e - x, material);
 	}
 	else if (object_type == "plane") {
 		Plane plane = get_plane(object);
-		colour = calculate_lighting(plane.n, x, e - x, material, lights);
+		colour = calculate_lighting(plane.n, x, e - x, material);
+
+
+		point3 R = reflect(e - x, plane.n);
+
+		
+		/*
+		solution = cast_ray(x + EPS*R, R, false);
+		t = solution.t;
+
+		if (t == MAX_T)
+			return true;
+			
+
+		json &object = solution.object;
+		json &material = object["material"];
+
+		if (object["type"] == "sphere") {
+			Sphere sphere = get_sphere(object);
+			colour = calculate_lighting(x - sphere.center, x, e - x, material, lights);
+		}
+		*//*
+
+
+
+
 	}
 	else if (object_type == "mesh") {
 		Triangle triangle = get_triangle(object, solution.triangle_index);
-		colour = calculate_lighting(triangle.n, x, e - x, material, lights);
+		colour = calculate_lighting(triangle.n, x, e - x, material);
 	}
 
 
 	return true;
+	*/
 }
