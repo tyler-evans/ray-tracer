@@ -323,6 +323,12 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 	/*if(level < MAX_LEVEL)
 		colour += mirror_term * recursive_trace(x + EPS * R, R, level+1);
 	*/
+
+	if (object_type == "plane") {
+		colour = 0.5f*colour + 0.5f*recursive_trace(x + EPS * d, d, level, found_intersection);
+	}
+
+
 	return colour;
 }
 
