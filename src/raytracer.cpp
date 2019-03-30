@@ -8,6 +8,9 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <glm/gtx/string_cast.hpp>
+#define _USE_MATH_DEFINES
+#include <math.h>
+#include <cmath>
 
 
 #include "json.hpp"
@@ -56,6 +59,7 @@ void choose_scene(char const *fn) {
 		std::cout << "Unable to open scene file " << fname << std::endl;
 		exit(EXIT_FAILURE);
 	}
+	std::cout << "Loaded scene file " << fname << std::endl;
 	
 	in >> scene;
 	
@@ -295,6 +299,27 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material)
 			}
 
 			total_colour += light_colour * (I_d * diffuse + I_s * specular);
+		}
+		else if (light["type"] == "spot") {
+			point3 light_position = vector_to_vec3(light["position"]);
+			point3 light_direction = vector_to_vec3(light["direction"]);
+			float cutoff_angle = float(light["cutoff"]) * M_PI / 180.0;
+
+			point3 point_to_light_vec = glm::normalize(light_position - x);
+
+			float I_d = calculate_I_d(normal, point_to_light_vec);
+			float I_s = calculate_I_s(normal, point_to_light_vec, look, shininess);
+
+			float shadow_test = cast_ray(x, point_to_light_vec, true).t;
+			float distance_to_light = glm::length(point_to_light_vec);
+			float angle = acos(glm::dot(-point_to_light_vec, light_direction) / glm::length(light_direction));
+			if ((EPS < shadow_test && shadow_test < MAX_T && shadow_test < distance_to_light) || (angle > 90 || angle > cutoff_angle)) {
+				I_d = 0.0;
+				I_s = 0.0;
+			}
+
+			total_colour += light_colour * (I_d * diffuse + I_s * specular);
+
 		}
 	}
 
