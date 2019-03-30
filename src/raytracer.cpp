@@ -48,7 +48,6 @@ glm::vec3 vector_to_vec3(const std::vector<float> &v) {
 void choose_scene(char const *fn) {
 	if (fn == NULL) {
 		std::cout << "Using default input file " << PATH << "c.json\n";
-		fn = "c";
 	}
 	
 	std::string fname = PATH + std::string(fn) + ".json";
@@ -227,6 +226,15 @@ point3 reflect(point3 V, point3 N) {
 	return -glm::reflect(V, N);
 }
 
+point3 refract_vector(point3 N, point3 V_i, float n_i, float n_r) {
+	float root_arg = 1.0f - (std::pow(n_i, 2) * (1.0f - std::pow(glm::dot(V_i, N), 2))) / std::pow(n_r, 2);
+
+	if (root_arg < 0.0)
+		return point3(0.0, 0.0, 0.0);
+
+	return n_i * (V_i - N * glm::dot(V_i, N)) / n_r - N * std::pow(root_arg, 0.5f);
+}
+
 float calculate_I_d(point3 N, point3 L) {
 	float I_d = glm::dot(glm::normalize(N), glm::normalize(L));
 	return std::max(I_d, 0.0f);
@@ -293,6 +301,7 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material)
 	return total_colour;
 }
 
+
 const int MAX_LEVEL = 1;
 colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection) {
 
@@ -320,14 +329,17 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 
 	point3 R = reflect(e - x, normal);
 	colour = calculate_lighting(normal, x, e - x, material);
+
+
 	/*if(level < MAX_LEVEL)
-		colour += mirror_term * recursive_trace(x + EPS * R, R, level+1);
+		colour += mirror_coefficient * recursive_trace(x + EPS * R, R, level+1);
 	*/
 
-	if (object_type == "plane") {
-		colour = 0.5f*colour + 0.5f*recursive_trace(x + EPS * d, d, level, found_intersection);
-	}
+	/*if (object_type == "plane") {
+		colour = (1.0f - transparency_coefficient)*colour + (transparency_coefficient)*recursive_trace(x + EPS * d, d, level, found_intersection);
+	}*/
 
+	
 
 	return colour;
 }
