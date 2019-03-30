@@ -80,6 +80,7 @@ void choose_scene(char const *fn) {
 
 struct RayCastSolution {
 	float t;
+	float further_t;
 	json object;
 	int triangle_index;
 	bool intersection;
@@ -146,7 +147,7 @@ float triangle_intersetion(point3 e, point3 d, Triangle triangle){
 	return triangle_test_0 && triangle_test_1 && triangle_test_2 ? t : MAX_T;
 }
 
-float sphere_intersection(point3 e, point3 d, Sphere sphere) {
+float sphere_intersection(point3 e, point3 d, Sphere sphere, float &store_further_t) {
 	float a = glm::dot(d, d);
 	float b = 2.0f*glm::dot(d, e - sphere.center);
 	float c = glm::dot(e - sphere.center, e - sphere.center) - std::pow(sphere.r, 2);
@@ -157,6 +158,9 @@ float sphere_intersection(point3 e, point3 d, Sphere sphere) {
 		float solution_1 = (-1.0f*b - glm::sqrt(discriminant)) / (2.0f*a);
 
 		float t = glm::min(solution_0, solution_1);
+		float further_t = glm::max(solution_0, solution_1);
+		store_further_t = further_t;
+		
 		return t;
 	}
 	return MAX_T;
@@ -185,7 +189,7 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 
 				float t = triangle_intersetion(e, d, triangle);
 
-				if (t < solution.t) { // intersection
+				if (t < solution.t && t>=0) { // intersection
 					solution.t = t;
 					solution.object = object;
 					solution.triangle_index = i;
@@ -199,9 +203,11 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 		}
 		else if (object["type"] == "sphere") {
 			Sphere sphere = get_sphere(object);
-			float t = sphere_intersection(e, d, sphere);
-			if (t < solution.t) {
+			float further_t;
+			float t = sphere_intersection(e, d, sphere, further_t);
+			if (t < solution.t && t >= 0) {
 				solution.t = t;
+				solution.further_t = further_t;
 				solution.object = object;
 				solution.intersection = true;
 				if (find_any)
@@ -212,7 +218,7 @@ RayCastSolution cast_ray(point3 e, point3 d, bool find_any) {
 			Plane plane = get_plane(object);
 			float t = plane_intersection(e, d, plane);
 
-			if (t < solution.t) {
+			if (t < solution.t && t >= 0) {
 				solution.t = t;
 				solution.object = object;
 				solution.intersection = true;
@@ -344,9 +350,12 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 	std::string object_type = object["type"];
 	point3 x = e + t * d;
 	point3 normal;
+	Sphere sphere;
 
-	if (object_type == "sphere")
-		normal = x - get_sphere(object).center;
+	if (object_type == "sphere") {
+		sphere = get_sphere(object);
+		normal = x - sphere.center;
+	}
 	else if (object_type == "plane")
 		normal = get_plane(object).n;
 	else if (object_type == "mesh")
@@ -359,15 +368,15 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 		colour3 reflective = vector_to_vec3(material["reflective"]);
 		colour += reflective * recursive_trace(x + EPS * R, R, level + 1, found_intersection);
 	}
-	/*if(level < MAX_LEVEL)
-		colour += mirror_coefficient * recursive_trace(x + EPS * R, R, level+1);
-	*/
 
-	/*if (object_type == "plane") {
-		colour = (1.0f - transparency_coefficient)*colour + (transparency_coefficient)*recursive_trace(x + EPS * d, d, level, found_intersection);
-	}*/
-
-	
+	if (material.find("transmissive") != material.end()) {
+		colour3 transmissive = vector_to_vec3(material["transmissive"]);
+		
+		if (object_type == "sphere")
+			colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(e + (solution.further_t + EPS) * d, d, level, found_intersection);
+		else
+			colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(x + EPS * d, d, level, found_intersection);
+	}
 
 	return colour;
 }
