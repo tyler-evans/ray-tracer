@@ -355,7 +355,10 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 	point3 R = reflect(e - x, normal);
 	colour = calculate_lighting(normal, x, e - x, material);
 
-
+	if (material.find("reflective") != material.end() && level < MAX_LEVEL) {
+		colour3 reflective = vector_to_vec3(material["reflective"]);
+		colour += reflective * recursive_trace(x + EPS * R, R, level + 1, found_intersection);
+	}
 	/*if(level < MAX_LEVEL)
 		colour += mirror_coefficient * recursive_trace(x + EPS * R, R, level+1);
 	*/
