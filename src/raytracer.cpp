@@ -51,6 +51,7 @@ glm::vec3 vector_to_vec3(const std::vector<float> &v) {
 void choose_scene(char const *fn) {
 	if (fn == NULL) {
 		std::cout << "Using default input file " << PATH << "c.json\n";
+		fn = "c";
 	}
 	
 	std::string fname = PATH + std::string(fn) + ".json";
