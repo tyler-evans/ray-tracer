@@ -355,7 +355,7 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 
 	if (object_type == "sphere") {
 		sphere = get_sphere(object);
-		normal = x - sphere.center;
+		normal = glm::normalize(x - sphere.center);
 	}
 	else if (object_type == "plane")
 		normal = get_plane(object).n;
@@ -366,10 +366,8 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 	colour = calculate_lighting(normal, x, e - x, material);
 
 	if (material.find("reflective") != material.end() && level < MAX_LEVEL) {
-		//if (!(object_type == "sphere" && glm::length(normal) < sphere.r-EPS)) { // if we are not inside a sphere
 			colour3 reflective = vector_to_vec3(material["reflective"]);
 			colour += reflective * recursive_trace(x + EPS * R, R, level + 1, found_intersection);
-		//}
 	}
 
 	if (material.find("transmissive") != material.end() && level < MAX_LEVEL) {
@@ -377,14 +375,8 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 		
 		if (material.find("refraction") != material.end()) {
 			float refraction = material["refraction"];
-			// N, V_i, n_i, n_r
-			d = refract_vector(glm::normalize(normal), d, refraction, 1.0);
+			d = refract_vector(normal, d, refraction, 1.0);
 		}
-		
-		/*if (object_type == "sphere")
-			colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(e + (solution.further_t + EPS) * d, d, level+1, found_intersection);
-		else
-			colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(x + EPS * d, d, level+1, found_intersection);*/
 		colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(x + EPS * d, d, level + 1, found_intersection);
 	}
 
