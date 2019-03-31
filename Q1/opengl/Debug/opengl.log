@@ -1,0 +1,6 @@
+﻿  raytracer.cpp
+c:\users\tyeva\desktop\graphics\fire\src\raytracer.cpp(103): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\tyeva\desktop\graphics\fire\src\raytracer.cpp(108): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\tyeva\desktop\graphics\fire\src\raytracer.cpp(109): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\tyeva\desktop\graphics\fire\src\raytracer.cpp(151): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+  opengl.vcxproj -> C:\Users\tyeva\Desktop\graphics\fire\\build\opengl.exe

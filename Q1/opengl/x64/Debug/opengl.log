@@ -1,0 +1,6 @@
+﻿  q1.cpp
+c:\users\tyeva\desktop\graphics\fire\src\q1.cpp(78): warning C4305: 'argument': truncation from 'double' to 'GLclampf'
+c:\users\tyeva\desktop\graphics\fire\src\q1.cpp(81): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+c:\users\tyeva\desktop\graphics\fire\src\q1.cpp(117): warning C4244: 'argument': conversion from 'int' to 'GLfloat', possible loss of data
+c:\users\tyeva\desktop\graphics\fire\src\q1.cpp(178): warning C4244: 'argument': conversion from 'int' to 'GLfloat', possible loss of data
+LINK : fatal error LNK1104: cannot open file 'freeglutd.lib'
