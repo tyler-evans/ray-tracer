@@ -334,7 +334,7 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material)
 }
 
 
-const int MAX_LEVEL = 5;
+const int MAX_LEVEL = 10;
 colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection) {
 
 	colour3 colour = background_colour;
