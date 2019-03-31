@@ -334,7 +334,7 @@ colour3 calculate_lighting(point3 normal, point3 x, point3 look, json &material)
 }
 
 
-const int MAX_LEVEL = 1;
+const int MAX_LEVEL = 10;
 colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection) {
 
 	colour3 colour = background_colour;
@@ -372,11 +372,6 @@ colour3 recursive_trace(point3 e, point3 d, int level, bool &found_intersection)
 
 	if (material.find("transmissive") != material.end()) {
 		colour3 transmissive = vector_to_vec3(material["transmissive"]);
-		
-		/*if (object_type == "sphere")
-			colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(e + (solution.further_t + EPS) * d, d, level, found_intersection);
-		else
-			colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(x + EPS * d, d, level, found_intersection);*/
 		colour = (1.0f - transmissive)*colour + (transmissive)*recursive_trace(x + EPS * d, d, level, found_intersection);
 	}
 
